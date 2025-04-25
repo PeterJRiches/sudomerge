@@ -1,0 +1,98 @@
+#!/bin/bash
+
+# sudomerge_pacnew: A `sudoedit` analog for merging `.pacnew` files in `/etc/`.
+
+# Helper function to display usage instructions
+usage() {
+  echo "Usage: $0 [--help] [--list] [--merge FILE]"
+  echo
+  echo "Options:"
+  echo "  --help      Show this help message and exit."
+  echo "  --list      List all .pacnew files in /etc/."
+  echo "  --merge FILE Merge the specified .pacnew file using a merge tool."
+  echo
+  echo "Description:"
+  echo "  This script provides a safer way to merge .pacnew files in /etc/, minimizing the use of elevated privileges."
+}
+
+# List all .pacnew files in /etc
+list_pacnew_files() {
+  find /etc -type f -name "*.pacnew"
+}
+
+# Merge a specified .pacnew file
+merge_pacnew_file() {
+  local file="$1"
+  if [[ ! -f $file ]]; then
+    echo "Error: File '$file' not found." >&2
+    exit 1
+  fi
+
+  local base_file="${file%.pacnew}"
+
+  if [[ ! -f $base_file ]]; then
+    echo "Error: Base file '$base_file' does not exist." >&2
+    exit 1
+  fi
+
+  # Copy the files to a temporary directory the user can access
+  local temp_dir
+  temp_dir=$(mktemp -d)
+  local temp_base="$temp_dir/$(basename "$base_file")"
+  local temp_pacnew="$temp_dir/$(basename "$file")"
+
+  cp "$base_file" "$temp_base"
+  cp "$file" "$temp_pacnew"
+  
+  echo "Temporary files for merging:"
+  echo "  Original: $temp_base"
+  echo "  .pacnew:  $temp_pacnew"
+
+  # Launch merge tool
+  local merge_tool="${MERGE_TOOL:-vimdiff}" # Default to vimdiff if MERGE_TOOL is not set
+  $merge_tool "$temp_base" "$temp_pacnew"
+
+  # Prompt user to overwrite the base file with the merged version
+  echo
+  echo "Merge completed. The merged file is located at: $temp_base"
+  read -p "Do you want to replace the original file '$base_file' with the merged content? [y/N] " confirm
+  if [[ $confirm =~ ^[Yy]$ ]]; then
+    echo "Preparing to replace the original file with elevated privileges..."
+    sudo -v || { echo "Failed to authenticate with sudo. Aborting."; exit 1; }
+    sudo cp "$temp_base" "$base_file"
+    echo "Merged content has replaced the original file: $base_file"
+  else
+    echo "Merge aborted. The original file remains unchanged."
+  fi
+
+  # Clean up temporary files
+  rm -rf "$temp_dir"
+}
+
+# Parse command-line arguments
+if [[ $# -eq 0 ]]; then
+  usage
+  exit 1
+fi
+
+case "$1" in
+  --help)
+    usage
+    ;;
+  --list)
+    list_pacnew_files
+    ;;
+  --merge)
+    if [[ -z $2 ]]; then
+      echo "Error: No file specified for merging." >&2
+      usage
+      exit 1
+    fi
+    merge_pacnew_file "$2"
+    ;;
+  *)
+    echo "Error: Unknown option '$1'." >&2
+    usage
+    exit 1
+    ;;
+esac
