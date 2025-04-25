@@ -28,6 +28,36 @@ usage() {
   echo "  This script provides a safer way to merge .pacnew files in /etc/, minimizing the use of elevated privileges."
 }
 
+main() {}
+  # Parse command-line arguments
+  if [[ $# -eq 0 ]]; then
+    usage
+    exit 1
+  fi
+
+  case "$1" in
+    --help)
+      usage
+      ;;
+    --list)
+      list_pacnew_files
+      ;;
+    --merge)
+      if [[ -z $2 ]]; then
+        echo "Error: No file specified for merging." >&2
+        usage
+        exit 1
+      fi
+      merge_pacnew_file "$2"
+      ;;
+    *)
+      echo "Error: Unknown option '$1'." >&2
+      usage
+      exit 1
+      ;;
+  esac
+}
+
 # List all .pacnew files in /etc
 list_pacnew_files() {
   find /etc -type f -name "*.pacnew"
@@ -82,30 +112,8 @@ merge_pacnew_file() {
   rm -rf "$temp_dir"
 }
 
-# Parse command-line arguments
-if [[ $# -eq 0 ]]; then
-  usage
-  exit 1
-fi
+# The test suite (shellspec) sets __SOURCED__ before sourcing a script file,
+# so it can safely test the functions therein without triggering the script.
+${__SOURCED__:+return}
 
-case "$1" in
-  --help)
-    usage
-    ;;
-  --list)
-    list_pacnew_files
-    ;;
-  --merge)
-    if [[ -z $2 ]]; then
-      echo "Error: No file specified for merging." >&2
-      usage
-      exit 1
-    fi
-    merge_pacnew_file "$2"
-    ;;
-  *)
-    echo "Error: Unknown option '$1'." >&2
-    usage
-    exit 1
-    ;;
-esac
+main "$@"
